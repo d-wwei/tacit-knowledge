@@ -31,6 +31,16 @@ The full SKILL.md in `~/.claude/skills/tacit-knowledge/` serves as a detailed re
 | Core rules | `~/.claude/tacit-knowledge.md` | Every conversation (via CLAUDE.md) | Always-on cognitive shifts |
 | Full reference | `~/.claude/skills/tacit-knowledge/SKILL.md` | When agent detects relevance | Detailed anti-patterns, examples, composition guide |
 
+## Adding a custom slash command alias
+
+By default the skill is triggered with `/tacit-knowledge`. To add a shorter or localized alias (e.g. `/默会知识`), create a symlink:
+
+```bash
+ln -s ~/.claude/skills/tacit-knowledge ~/.claude/skills/默会知识
+```
+
+Now both `/tacit-knowledge` and `/默会知识` invoke the same skill.
+
 ## Verifying installation
 
 Start a new Claude Code conversation and ask any question that requires judgment (e.g., "Should I use TypeScript or JavaScript for this project?"). The response should:
