@@ -1,5 +1,8 @@
 # Installing Tacit Knowledge for Any AI Agent
 
+> **Recommended**: Run `./install.sh` from the repo root for automated installation. Supports Claude Code, Gemini CLI, Codex CLI, Cursor, OpenCode, and OpenClaw.
+> The manual steps below are for reference or troubleshooting.
+
 ## The universal principle
 
 Every AI agent has some mechanism for instructions that are loaded before user input. Find that mechanism and put `cognitive-protocol.md` there.

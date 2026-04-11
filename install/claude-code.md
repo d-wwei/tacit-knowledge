@@ -1,5 +1,8 @@
 # Installing Tacit Knowledge for Claude Code
 
+> **Recommended**: Run `./install.sh` from the repo root for automated installation with dual-mode support (@ reference + inline fallback).
+> The manual steps below are for reference or troubleshooting.
+
 ## Quick install
 
 ```bash

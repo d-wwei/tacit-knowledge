@@ -1,5 +1,8 @@
 # Installing Tacit Knowledge for Codex (OpenAI)
 
+> **Recommended**: Run `./install.sh --agent=codex-cli` from the repo root for automated installation.
+> The manual steps below are for reference or troubleshooting.
+
 ## Method 1: AGENTS.md (recommended for Codex CLI)
 
 If you're using Codex CLI, add the contents of `cognitive-protocol.md` to your project's `AGENTS.md` file:

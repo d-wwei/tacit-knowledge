@@ -1,5 +1,8 @@
 # Installing Tacit Knowledge for Gemini (Google)
 
+> **Recommended**: Run `./install.sh --agent=gemini-cli` from the repo root for automated installation.
+> The manual steps below are for reference or troubleshooting.
+
 ## Method 1: System instructions (Gemini API)
 
 Add the contents of `cognitive-protocol.md` to your system instruction:
