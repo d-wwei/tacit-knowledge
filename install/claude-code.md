@@ -11,16 +11,13 @@ cd tacit-knowledge
 mkdir -p ~/.claude/skills/tacit-knowledge
 cp SKILL.md anti-patterns.md examples.md ~/.claude/skills/tacit-knowledge/
 
-# Inject core rules (this is the key step — ensures always-on)
-cp cognitive-protocol.md ~/.claude/tacit-knowledge.md
-
-# Add reference to CLAUDE.md (skip if already present)
-grep -q "tacit-knowledge" ~/.claude/CLAUDE.md 2>/dev/null || echo '@~/.claude/tacit-knowledge.md' >> ~/.claude/CLAUDE.md
+# Inject core rules into CLAUDE.md (direct content injection — works on all versions)
+cat cognitive-protocol.md >> ~/.claude/CLAUDE.md
 ```
 
 ## How it works in Claude Code
 
-Claude Code reads `~/.claude/CLAUDE.md` at the start of **every** conversation. By adding the `@~/.claude/tacit-knowledge.md` reference, the core cognitive rules are loaded automatically — no manual trigger needed.
+Claude Code reads `~/.claude/CLAUDE.md` at the start of **every** conversation. The core cognitive rules are directly injected into CLAUDE.md, so they load automatically — no manual trigger needed, no version-specific features required.
 
 The full SKILL.md in `~/.claude/skills/tacit-knowledge/` serves as a detailed reference that Claude Code can access when deeper guidance is needed.
 
@@ -28,7 +25,7 @@ The full SKILL.md in `~/.claude/skills/tacit-knowledge/` serves as a detailed re
 
 | Layer | File | Loaded when | Purpose |
 |---|---|---|---|
-| Core rules | `~/.claude/tacit-knowledge.md` | Every conversation (via CLAUDE.md) | Always-on cognitive shifts |
+| Core rules | `~/.claude/CLAUDE.md` (appended) | Every conversation (part of CLAUDE.md) | Always-on cognitive shifts |
 | Full reference | `~/.claude/skills/tacit-knowledge/SKILL.md` | When agent detects relevance | Detailed anti-patterns, examples, composition guide |
 
 ## Adding a custom slash command alias
@@ -52,10 +49,9 @@ Start a new Claude Code conversation and ask any question that requires judgment
 ## Uninstalling
 
 ```bash
-# Remove the reference from CLAUDE.md
-sed -i '' '/@~\/.claude\/tacit-knowledge.md/d' ~/.claude/CLAUDE.md
+# Remove the Tacit Knowledge section from ~/.claude/CLAUDE.md
+# (search for the "# Tacit Knowledge — Cognitive Protocol" header and delete that section)
 
-# Remove files
-rm ~/.claude/tacit-knowledge.md
+# Remove skill files
 rm -rf ~/.claude/skills/tacit-knowledge
 ```
