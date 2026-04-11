@@ -1,3 +1,8 @@
+---
+name: 默会知识
+description: "默会知识——识别和运用不可言说的专业判断与模式识别。"
+---
+
 # Tacit Knowledge
 
 Universal cognitive base layer for AI agents. Changes how the agent thinks across all tasks.
