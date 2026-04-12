@@ -46,19 +46,21 @@ remove_inline() {
 
 has_inline() {
     local config_file="$1" base_name="$2"
-    [[ -f "$config_file" ]] && grep -qF "COGNITIVE-BASE:$base_name:BEGIN" "$config_file" 2>/dev/null
+    [[ -f "$config_file" ]] && grep -qF "COGNITIVE-BASE:$base_name:BEGIN" "$config_file" 2>/dev/null || return 1
 }
 
 has_ref() {
     local config_file="$1" ref_pattern="$2"
-    [[ -f "$config_file" ]] && grep -qF "$ref_pattern" "$config_file" 2>/dev/null
+    [[ -f "$config_file" ]] && grep -qF "$ref_pattern" "$config_file" 2>/dev/null || return 1
 }
 
 copy_skills() {
     local skill_dir="$1"
     mkdir -p "$skill_dir"
     for f in SKILL.md anti-patterns.md examples.md extended-protocol.md; do
-        [[ -f "$SCRIPT_DIR/$f" ]] && cp "$SCRIPT_DIR/$f" "$skill_dir/"
+        if [[ -f "$SCRIPT_DIR/$f" ]]; then
+            cp "$SCRIPT_DIR/$f" "$skill_dir/"
+        fi
     done
 }
 
@@ -108,6 +110,101 @@ detect_openclaw() {
     [[ -d "$HOME/.openclaw" ]]
 }
 
+# ============================================================================
+# Version Detection (for @ ref support)
+# ============================================================================
+
+# Compare semver: returns 0 if $1 >= $2
+version_gte() {
+    local v1="$1" v2="$2"
+    # Split into parts
+    local IFS='.'
+    read -ra a <<< "$v1"
+    read -ra b <<< "$v2"
+    for i in 0 1 2; do
+        local x="${a[$i]:-0}" y="${b[$i]:-0}"
+        if (( x > y )); then return 0; fi
+        if (( x < y )); then return 1; fi
+    done
+    return 0
+}
+
+# Claude Code: @ ref support requires >= 1.0.0
+# (Feature existed by v2.1.89 per changelog; using 1.0.0 as conservative floor)
+CLAUDE_CODE_MIN_REF_VERSION="1.0.0"
+
+get_claude_code_version() {
+    local ver
+    ver=$(set +e +o pipefail; claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; true)
+    echo "${ver:-0.0.0}"
+}
+
+claude_code_supports_ref() {
+    local ver
+    ver=$(get_claude_code_version)
+    if [[ "$ver" == "0.0.0" ]]; then
+        return 1  # can't determine version → no ref
+    fi
+    version_gte "$ver" "$CLAUDE_CODE_MIN_REF_VERSION"
+}
+
+# Gemini CLI: @ ref support requires >= 0.20.0
+# (Feature is documented in current versions; using 0.20.0 as conservative floor)
+GEMINI_CLI_MIN_REF_VERSION="0.20.0"
+
+get_gemini_cli_version() {
+    # gemini --version may fail due to config issues; try npm as fallback
+    # Use subshell with || to avoid set -eo pipefail killing the caller
+    local ver
+    ver=$(set +e +o pipefail; gemini --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; true)
+    if [[ -z "$ver" ]]; then
+        ver=$(set +e +o pipefail; npm list -g @google/gemini-cli 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; true)
+    fi
+    echo "${ver:-0.0.0}"
+}
+
+gemini_cli_supports_ref() {
+    local ver
+    ver=$(get_gemini_cli_version)
+    if [[ "$ver" == "0.0.0" ]]; then
+        return 1
+    fi
+    version_gte "$ver" "$GEMINI_CLI_MIN_REF_VERSION"
+}
+
+# Resolve actual mode for an agent: respects --inline override, otherwise auto-detects
+resolve_mode() {
+    local agent="$1"
+    # --inline flag forces inline for all agents
+    if [[ "$MODE" == "inline" ]]; then
+        echo "inline"
+        return
+    fi
+    case "$agent" in
+        claude-code)
+            if claude_code_supports_ref; then
+                echo "ref"
+            else
+                local ver=$(get_claude_code_version)
+                warn "Claude Code v$ver: @ ref not supported (requires >= $CLAUDE_CODE_MIN_REF_VERSION), using inline mode"
+                echo "inline"
+            fi
+            ;;
+        gemini-cli)
+            if gemini_cli_supports_ref; then
+                echo "ref"
+            else
+                local ver=$(get_gemini_cli_version)
+                warn "Gemini CLI v$ver: @ ref not supported (requires >= $GEMINI_CLI_MIN_REF_VERSION), using inline mode"
+                echo "inline"
+            fi
+            ;;
+        *)
+            echo "inline"
+            ;;
+    esac
+}
+
 detect_all() {
     local agents=()
     detect_claude_code && agents+=("claude-code")
@@ -129,11 +226,13 @@ install_claude_code() {
     local protocol_dest="$config_dir/$BASE_NAME.md"
     local skill_dir="$config_dir/skills/$BASE_NAME"
     local ref_line="@~/.claude/$BASE_NAME.md"
+    local actual_mode
+    actual_mode=$(resolve_mode "claude-code")
 
     mkdir -p "$config_dir"
     touch "$config_file"
 
-    if [[ "$MODE" == "inline" ]]; then
+    if [[ "$actual_mode" == "inline" ]]; then
         # Remove ref mode if exists, then inject inline
         if has_ref "$config_file" "$ref_line"; then
             local tmp="${config_file}.tmp.$$"
@@ -147,7 +246,7 @@ install_claude_code() {
         fi
         inject_inline "$config_file" "$PROTOCOL_FILE" "$BASE_NAME"
     else
-        # @ ref mode (default)
+        # @ ref mode
         if has_inline "$config_file" "$BASE_NAME"; then
             remove_inline "$config_file" "$BASE_NAME"
             log "Claude Code: switched from inline to @ ref mode"
@@ -159,7 +258,9 @@ install_claude_code() {
     fi
 
     copy_skills "$skill_dir"
-    success "Claude Code: $BASE_TITLE installed ($( [[ "$MODE" == "inline" ]] && echo "inline" || echo "@ ref" ) mode)"
+    local cc_ver
+    cc_ver=$(get_claude_code_version)
+    success "Claude Code: $BASE_TITLE installed ($actual_mode mode, v$cc_ver)"
 }
 
 install_gemini_cli() {
@@ -168,11 +269,13 @@ install_gemini_cli() {
     local protocol_dest="$config_dir/$BASE_NAME.md"
     local skill_dir="$config_dir/skills/$BASE_NAME"
     local ref_line="@~/.gemini/$BASE_NAME.md"
+    local actual_mode
+    actual_mode=$(resolve_mode "gemini-cli")
 
     mkdir -p "$config_dir"
     touch "$config_file"
 
-    if [[ "$MODE" == "inline" ]]; then
+    if [[ "$actual_mode" == "inline" ]]; then
         if has_ref "$config_file" "$ref_line"; then
             local tmp="${config_file}.tmp.$$"
             grep -vF "$ref_line" "$config_file" > "$tmp" || true
@@ -194,7 +297,9 @@ install_gemini_cli() {
     fi
 
     copy_skills "$skill_dir"
-    success "Gemini CLI: $BASE_TITLE installed ($( [[ "$MODE" == "inline" ]] && echo "inline" || echo "@ ref" ) mode)"
+    local gc_ver
+    gc_ver=$(get_gemini_cli_version)
+    success "Gemini CLI: $BASE_TITLE installed ($actual_mode mode, v$gc_ver)"
 }
 
 install_codex_cli() {
@@ -372,22 +477,26 @@ show_status() {
 
     # Claude Code
     local cc_file="$HOME/.claude/CLAUDE.md"
+    local cc_ver=$(get_claude_code_version)
+    local cc_ref_ok="no"; claude_code_supports_ref && cc_ref_ok="yes"
     if has_ref "$cc_file" "@~/.claude/$BASE_NAME.md"; then
-        success "Claude Code: installed (@ ref mode)"
+        success "Claude Code: installed (@ ref mode) — v$cc_ver, @ ref supported: $cc_ref_ok"
     elif has_inline "$cc_file" "$BASE_NAME"; then
-        success "Claude Code: installed (inline mode)"
+        success "Claude Code: installed (inline mode) — v$cc_ver, @ ref supported: $cc_ref_ok"
     else
-        log "Claude Code: not installed"
+        log "Claude Code: not installed — v$cc_ver, @ ref supported: $cc_ref_ok"
     fi
 
     # Gemini CLI
     local gc_file="$HOME/.gemini/GEMINI.md"
+    local gc_ver=$(get_gemini_cli_version)
+    local gc_ref_ok="no"; gemini_cli_supports_ref && gc_ref_ok="yes"
     if has_ref "$gc_file" "@~/.gemini/$BASE_NAME.md"; then
-        success "Gemini CLI: installed (@ ref mode)"
+        success "Gemini CLI: installed (@ ref mode) — v$gc_ver, @ ref supported: $gc_ref_ok"
     elif has_inline "$gc_file" "$BASE_NAME"; then
-        success "Gemini CLI: installed (inline mode)"
+        success "Gemini CLI: installed (inline mode) — v$gc_ver, @ ref supported: $gc_ref_ok"
     else
-        log "Gemini CLI: not installed"
+        log "Gemini CLI: not installed — v$gc_ver, @ ref supported: $gc_ref_ok"
     fi
 
     # Codex CLI
